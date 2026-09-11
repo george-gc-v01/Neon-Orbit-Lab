@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="src/NeonOrbit.Core/NeonOrbit.Core.csproj" />
+  <Project Path="src/NeonOrbit.App/NeonOrbit.App.csproj" />
+  <Project Path="tests/NeonOrbit.Tests/NeonOrbit.Tests.csproj" />
+</Solution>

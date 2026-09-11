@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Deterministic>true</Deterministic>
+    <Version>0.1.0</Version>
+    <Authors>George Culache</Authors>
+    <Copyright>Copyright © 2026 George Culache (george-gc-v01)</Copyright>
+  </PropertyGroup>
+</Project>

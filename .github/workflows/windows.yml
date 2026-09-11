@@ -1,0 +1,52 @@
+name: Windows build and verification
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Generate original icon
+        run: node scripts/create-icon.mjs
+      - name: Build solution
+        run: dotnet build NeonOrbit.slnx --configuration Release
+      - name: Core verification suite
+        run: dotnet run --project tests/NeonOrbit.Tests --configuration Release --no-build
+      - name: WPF visual smoke test (no system cursor or power changes)
+        shell: pwsh
+        run: |
+          $process = Start-Process 'src/NeonOrbit.App/bin/Release/net10.0-windows/NeonOrbitProcess.v2026.exe' -ArgumentList '--smoke-test' -PassThru
+          if (-not $process.WaitForExit(45000)) { $process.Kill(); throw 'UI smoke test timed out.' }
+          if ($process.ExitCode -ne 0) { throw "UI smoke exit $($process.ExitCode)" }
+          if (-not (Test-Path 'artifacts/ui-smoke.txt')) { throw 'Smoke result missing.' }
+      - name: Self-contained portable build
+        run: dotnet publish src/NeonOrbit.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -o artifacts/portable
+      - name: Package installer and checksums
+        shell: pwsh
+        run: |
+          Copy-Item LICENSE artifacts/portable/LICENSE.txt
+          Copy-Item README.md artifacts/portable/README.md
+          $compiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $compiler)) { throw 'Inno Setup 6 is required on this runner.' }
+          & $compiler installer/NeonOrbit.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
+          Compress-Archive -Path artifacts/portable/* -DestinationPath artifacts/Neon-Orbit-win-x64-portable.zip
+          Get-ChildItem artifacts -File | Where-Object { $_.Extension -in '.exe','.zip' } | Get-FileHash -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $(Split-Path $_.Path -Leaf)" } | Set-Content artifacts/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Neon-Orbit-Windows-Beta
+          path: |
+            artifacts/*.txt
+            artifacts/*.png
+            artifacts/*.exe
+            artifacts/*.zip
+          retention-days: 14

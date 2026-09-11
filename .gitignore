@@ -1,0 +1,14 @@
+# Visual Studio / .NET
+.vs/
+.idea/
+**/bin/
+**/obj/
+*.user
+*.suo
+TestResults/
+artifacts/
+*.pfx
+*.key
+.env
+logs/
+*.jsonl
