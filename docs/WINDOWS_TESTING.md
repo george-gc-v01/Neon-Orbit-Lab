@@ -10,6 +10,8 @@ Run `dotnet run --project tests/NeonOrbit.Tests -c Release`. The runner writes `
 
 Run the app with `--smoke-test` to render its own WPF window to `artifacts/neon-orbit-preview.png` and exit. This mode makes no pointer or power requests. This render is generated exclusively from the application's own visual tree, not a screenshot of the desktop.
 
+`--native-smoke` checks x64 structure layouts, session and hotkey registration, mouse-hook installation/removal and 100 Windows power-request lifecycles. It makes temporary power requests on the test machine, releases them and never generates pointer movement. The workflow also silently installs the per-user package in a unique runner test directory, executes the installed binary's native checks, and uninstalls it.
+
 ## Home-PC acceptance
 
 | Test | Procedure | Pass condition |

@@ -261,7 +261,8 @@ public partial class MainWindow : Window
         if (tray != null)
         {
             // Absolute deadline stays accurate without periodic updates in hidden low.
-            tray.Text = state == NeonState.Low ? $"Neon Orbit · Neon low until {DateTime.Now.AddSeconds(Math.Max(0, engine.PhaseEnd-now)):HH:mm:ss}" : "Neon Orbit · " + StateLabel.Text;
+            string tooltip = state == NeonState.Low ? $"Neon Orbit · Neon low until {DateTime.Now.AddSeconds(Math.Max(0, engine.PhaseEnd-now)):HH:mm:ss}" : "Neon Orbit · " + StateLabel.Text;
+            if (tray.Text != tooltip) tray.Text = tooltip;
         }
     }
     private void ApplyPower()

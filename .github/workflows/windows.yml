@@ -52,6 +52,21 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
           Compress-Archive -Path artifacts/portable/* -DestinationPath artifacts/Neon-Orbit-win-x64-portable.zip
           Get-ChildItem artifacts -File | Where-Object { $_.Extension -in '.exe','.zip' } | Get-FileHash -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $(Split-Path $_.Path -Leaf)" } | Set-Content artifacts/SHA256SUMS.txt
+      - name: Verify per-user install and uninstall
+        shell: pwsh
+        run: |
+          $installTarget = Join-Path $env:RUNNER_TEMP 'neon-orbit-installer-test'
+          if (Test-Path $installTarget) { throw 'Installer test path already exists.' }
+          $setup = Start-Process 'artifacts/Neon-Orbit-v0.1.0-beta-Setup.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$installTarget`"") -PassThru
+          if (-not $setup.WaitForExit(60000)) { $setup.Kill(); throw 'Installer timed out.' }
+          if ($setup.ExitCode -ne 0 -or -not (Test-Path "$installTarget/NeonOrbitProcess.v2026.exe")) { throw 'Install verification failed.' }
+          $check = Start-Process "$installTarget/NeonOrbitProcess.v2026.exe" -ArgumentList '--native-smoke' -PassThru
+          if (-not $check.WaitForExit(45000)) { $check.Kill(); throw 'Installed binary timed out.' }
+          if ($check.ExitCode -ne 0) { throw 'Installed standalone binary failed.' }
+          $uninstall = Start-Process "$installTarget/unins000.exe" -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -PassThru
+          if (-not $uninstall.WaitForExit(60000)) { $uninstall.Kill(); throw 'Uninstaller timed out.' }
+          if ($uninstall.ExitCode -ne 0 -or (Test-Path "$installTarget/NeonOrbitProcess.v2026.exe")) { throw 'Uninstall verification failed.' }
+          'PASS: per-user silent install, installed native checks, clean uninstall.' | Set-Content artifacts/installer-smoke.txt
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
