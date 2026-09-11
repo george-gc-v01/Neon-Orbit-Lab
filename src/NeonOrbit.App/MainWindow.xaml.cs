@@ -44,6 +44,12 @@ public partial class MainWindow : Window
         dataRoot = preview ? System.IO.Path.Combine(System.IO.Path.GetTempPath(), "NeonOrbitPreview", Guid.NewGuid().ToString("N")) :
             System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NeonOrbit");
         InitializeComponent();
+        // Keep controls reachable on laptop screens and at 150–200% Windows scaling.
+        var available = SystemParameters.WorkArea;
+        MinHeight = Math.Min(MinHeight, Math.Max(300, available.Height - 24));
+        MinWidth = Math.Min(MinWidth, Math.Max(320, available.Width - 24));
+        Height = Math.Min(Height, Math.Max(MinHeight, available.Height - 24));
+        Width = Math.Min(Width, Math.Max(MinWidth, available.Width - 24));
         settings = preview ? new LabSettings { MinimiseOnLaunch = false, Awake = false, Logging = false } : LabSettings.Load(SettingsPath, out warning);
         FillSettings();
         log = new(System.IO.Path.Combine(dataRoot, "logs", $"session-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.jsonl"));
