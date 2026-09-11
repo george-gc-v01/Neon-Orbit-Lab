@@ -10,8 +10,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
       - name: Generate original icon
@@ -29,18 +29,30 @@ jobs:
           if (-not (Test-Path 'artifacts/ui-smoke.txt')) { throw 'Smoke result missing.' }
       - name: Self-contained portable build
         run: dotnet publish src/NeonOrbit.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -o artifacts/portable
+      - name: Native lifecycle checks on isolated Windows runner
+        shell: pwsh
+        run: |
+          $process = Start-Process 'artifacts/portable/NeonOrbitProcess.v2026.exe' -ArgumentList '--native-smoke' -PassThru
+          if (-not $process.WaitForExit(45000)) { $process.Kill(); throw 'Native checks timed out.' }
+          if ($process.ExitCode -ne 0) { Get-Content artifacts/native-smoke.txt; throw 'Native lifecycle checks failed.' }
       - name: Package installer and checksums
         shell: pwsh
         run: |
           Copy-Item LICENSE artifacts/portable/LICENSE.txt
           Copy-Item README.md artifacts/portable/README.md
+          Copy-Item THIRD_PARTY_NOTICES.md artifacts/portable/THIRD_PARTY_NOTICES.md
+          Copy-Item BRANDING.md artifacts/portable/BRANDING.md
+          $dotnetRoot = Split-Path (Get-Command dotnet).Source
+          Copy-Item "$dotnetRoot/LICENSE.txt" artifacts/portable/DOTNET-LICENSE.txt
+          Copy-Item "$dotnetRoot/ThirdPartyNotices.txt" artifacts/portable/DOTNET-ThirdPartyNotices.txt
+          git archive --format=zip --output=artifacts/Neon-Orbit-corresponding-source.zip HEAD
           $compiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
           if (-not (Test-Path $compiler)) { throw 'Inno Setup 6 is required on this runner.' }
           & $compiler installer/NeonOrbit.iss
           if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
           Compress-Archive -Path artifacts/portable/* -DestinationPath artifacts/Neon-Orbit-win-x64-portable.zip
           Get-ChildItem artifacts -File | Where-Object { $_.Extension -in '.exe','.zip' } | Get-FileHash -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $(Split-Path $_.Path -Leaf)" } | Set-Content artifacts/SHA256SUMS.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: Neon-Orbit-Windows-Beta

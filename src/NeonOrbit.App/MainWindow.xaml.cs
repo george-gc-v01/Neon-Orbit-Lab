@@ -111,12 +111,23 @@ public partial class MainWindow : Window
             Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
             {
                 UpdateLayout();
-                var bitmap = new RenderTargetBitmap((int)ActualWidth, (int)ActualHeight, 96, 96, PixelFormats.Pbgra32);
-                bitmap.Render(this);
+                if (Background is not SolidColorBrush background || background.Color.R > 40)
+                    throw new InvalidOperationException("Preview default theme is not dark.");
+                if (observer != null || movements != 0) throw new InvalidOperationException("Preview unexpectedly activated input.");
+                // Exercise UI-controlled Test Mode and stop/start without native cursor generation.
+                TestToggle.IsChecked = true; ApplyClick(this, new RoutedEventArgs());
+                if (!engine.TestMode || engine.SampledSeconds > 50) throw new InvalidOperationException("Test Mode UI failed.");
+                StopExperiment(); if (engine.CanMove) throw new InvalidOperationException("Stop control failed.");
+                TestToggle.IsChecked = false; ApplyClick(this, new RoutedEventArgs());
+                if (engine.SampledSeconds < 900) throw new InvalidOperationException("Normal timing not restored.");
+                UpdateLayout();
+                var content = (FrameworkElement)Content;
+                var bitmap = new RenderTargetBitmap((int)content.ActualWidth, (int)content.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                bitmap.Render(content);
                 Directory.CreateDirectory("artifacts");
                 var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
                 using (var stream = File.Create("artifacts/neon-orbit-preview.png")) encoder.Save(stream);
-                File.WriteAllText("artifacts/ui-smoke.txt", "PASS: WPF window loaded and rendered; preview made no input or power requests.");
+                File.WriteAllText("artifacts/ui-smoke.txt", "PASS: WPF dark theme, Test Mode controls, Stop/Start, normal timing restoration, preview isolation and own-window rendering. No input or power requests.");
                 Close();
             }));
         }
@@ -235,10 +246,10 @@ public partial class MainWindow : Window
         StateLabel.Text = state == NeonState.Stopped ? "Stopped" : $"Neon {state.ToString().ToLowerInvariant()} " + (engine.ButtonHeld ? "· your input" : countdown);
         StateLabel.Foreground = (Brush)FindResource(state == NeonState.Low ? "Blue" : "Green");
         PhaseProgress.Value = engine.Running ? Math.Clamp((engine.PhaseEnd - now) / engine.SampledSeconds, 0, 1) : 0;
-        PhaseLabel.Text = state == NeonState.Wow ? $"Your input has priority · scheduled Neon {engine.Phase.ToString().ToLowerInvariant()}" :
+        PhaseLabel.Text = state == NeonState.Wow ? $"Your input · {(now - engine.WowStart):F0} s elapsed · scheduled Neon {engine.Phase.ToString().ToLowerInvariant()}" :
             state == NeonState.Low ? "Pointer resting · low resource interval" : state == NeonState.Stopped ? "Press Start to begin a new interval." : $"Sampled {engine.SampledSeconds:F1} s · your input takes priority";
         DiameterLabel.Text = $"{settings.DiameterMm:g} mm · {settings.RevolutionSeconds:g} s";
-        DpiLabel.Text = $"{dpi} DPI · {(settings.PixelsPerMm > 0 ? "calibrated" : "estimate")}";
+        DpiLabel.Text = $"{dpi} DPI · {Orbit.DiameterPixels(settings.DiameterMm, dpi, settings.PixelsPerMm):F0} px\n{(settings.PixelsPerMm > 0 ? "calibrated" : "size estimate")}";
         CountLabel.Text = movements.ToString("N0", CultureInfo.CurrentCulture);
         ModeLabel.Text = preview ? "PREVIEW · NO INPUT" : engine.TestMode ? "TEST · SECONDS" : "EDUCATIONAL BETA";
         if (IsVisible && WindowState != WindowState.Minimized)
@@ -247,7 +258,11 @@ public partial class MainWindow : Window
             OrbitArt.Low = state == NeonState.Low; OrbitArt.InvalidateVisual();
             CalibrationLine.Width = 100 / VisualTreeHelper.GetDpi(this).DpiScaleX;
         }
-        if (tray != null) tray.Text = "Neon Orbit · " + StateLabel.Text;
+        if (tray != null)
+        {
+            // Absolute deadline stays accurate without periodic updates in hidden low.
+            tray.Text = state == NeonState.Low ? $"Neon Orbit · Neon low until {DateTime.Now.AddSeconds(Math.Max(0, engine.PhaseEnd-now)):HH:mm:ss}" : "Neon Orbit · " + StateLabel.Text;
+        }
     }
     private void ApplyPower()
     {

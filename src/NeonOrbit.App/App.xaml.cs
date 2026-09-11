@@ -10,6 +10,7 @@ public partial class App : System.Windows.Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        if (e.Args.Contains("--native-smoke")) { Shutdown(NativeSmoke.Run()); return; }
         bool preview = e.Args.Contains("--preview") || e.Args.Contains("--smoke-test");
         instance = new Mutex(true, "Local\\NeonOrbitProcess.v2026" + (preview ? ".Preview" : ""), out var created);
         if (!created) { MessageBox.Show("Neon Orbit is already running. Open it from the N tray icon."); Shutdown(); return; }
