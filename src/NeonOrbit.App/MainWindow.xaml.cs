@@ -26,6 +26,7 @@ public partial class MainWindow : Window
     private SessionLog log = null!;
     private Orbit? orbit;
     private double orbitAt;
+    private double scheduledTickAt;
     private PointD approach;
     private PointD? lastGenerated;
     private nint monitor;
@@ -126,6 +127,11 @@ public partial class MainWindow : Window
                 StopExperiment(); if (engine.CanMove) throw new InvalidOperationException("Stop control failed.");
                 TestToggle.IsChecked = false; ApplyClick(this, new RoutedEventArgs());
                 if (engine.SampledSeconds < 900) throw new InvalidOperationException("Normal timing not restored.");
+                var heartbeat = scheduledTickAt;
+                for (int i = 0; i < 200; i++) OnInput(false);
+                if (engine.State != NeonState.Wow || scheduledTickAt > heartbeat + .001)
+                    throw new InvalidOperationException("Continuous input postponed the UI heartbeat.");
+                StopExperiment(); StartExperiment();
                 UpdateLayout();
                 var content = (FrameworkElement)Content;
                 var bitmap = new RenderTargetBitmap((int)content.ActualWidth, (int)content.ActualHeight, 96, 96, PixelFormats.Pbgra32);
@@ -133,7 +139,7 @@ public partial class MainWindow : Window
                 Directory.CreateDirectory("artifacts");
                 var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
                 using (var stream = File.Create("artifacts/neon-orbit-preview.png")) encoder.Save(stream);
-                File.WriteAllText("artifacts/ui-smoke.txt", "PASS: WPF dark theme, Test Mode controls, Stop/Start, normal timing restoration, preview isolation and own-window rendering. No input or power requests.");
+                File.WriteAllText("artifacts/ui-smoke.txt", "PASS: WPF dark theme, Test Mode controls, Stop/Start, normal timing restoration, continuous-input heartbeat, preview isolation and own-window rendering. No input or power requests.");
                 Close();
             }));
         }
@@ -181,7 +187,10 @@ public partial class MainWindow : Window
     private void OnInput(bool held)
     {
         if (!ready || cleaned || closing || !engine.Running) return;
-        engine.Input(Now, held); orbit = null; lastGenerated = null; Schedule();
+        var previous = engine.State;
+        engine.Input(Now, held); orbit = null; lastGenerated = null;
+        if (engine.State != previous) RenderStatus();
+        Schedule();
     }
     private void OnTimer(object? sender, EventArgs e)
     {
@@ -232,15 +241,18 @@ public partial class MainWindow : Window
     }
     private void Schedule()
     {
-        timer.Stop();
-        if (!ready || cleaned || closing) return;
+        if (!ready || cleaned || closing) { timer.Stop(); return; }
         double now = Now, delay = engine.NextDeadline(now) - now;
         if (engine.CanMove && !preview) delay = Math.Min(delay, 1.0 / 30);
         bool visible = IsVisible && WindowState != WindowState.Minimized;
         if (visible) delay = Math.Min(delay, engine.CanMove && !settings.ReducedMotion && SystemParameters.ClientAreaAnimation ? 1.0 / 30 : 1);
         if (engine.ButtonHeld) delay = Math.Min(delay, .25); // button release fail-safe, no pointer coordinates collected
-        if (double.IsPositiveInfinity(delay)) return;
-        timer.Interval = TimeSpan.FromSeconds(Math.Clamp(delay, .005, 86400)); timer.Start();
+        if (double.IsPositiveInfinity(delay)) { timer.Stop(); return; }
+        delay = Math.Clamp(delay, .005, 86400);
+        // Repeated input may extend recovery, but must never starve an already scheduled UI heartbeat.
+        if (timer.IsEnabled && scheduledTickAt <= now + delay) return;
+        timer.Stop(); scheduledTickAt = now + delay;
+        timer.Interval = TimeSpan.FromSeconds(delay); timer.Start();
     }
     private void RenderStatus()
     {
